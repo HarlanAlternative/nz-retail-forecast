@@ -1,0 +1,69 @@
+model:
+  lgbm:
+    n_estimators: 500
+    learning_rate: 0.05
+    num_leaves: 31
+    min_child_samples: 20
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_alpha: 0.1
+    reg_lambda: 0.1
+  ridge:
+    alpha: 1.0
+  elasticnet:
+    alpha: 1.0
+    l1_ratio: 0.5
+  cv_folds: 5
+  test_size_months: 8   # quarters, not months — 8 quarters = 2 years hold-out
+  optuna_trials: 30
+  random_seed: 42
+
+data:
+  raw_data_path: data/raw/
+  processed_data_path: data/processed/
+  frequency: quarterly   # Stats NZ retail trade is quarterly
+
+  # Stats NZ CSV downloads (no auth needed)
+  retail_csv_url: "https://www.stats.govt.nz/assets/Uploads/Retail-trade-survey/Retail-trade-survey-December-2024-quarter/Download-data/retail-trade-survey-december-2024-quarter.csv"
+  retail_series_ref: "RTTQ.SF11CA"   # Core industries total, current prices, quarterly, seasonally adjusted
+
+  cpi_csv_url: "https://www.stats.govt.nz/assets/Uploads/Consumers-price-index/Consumers-price-index-December-2025-quarter/Download-data/consumers-price-index-december-2025-quarter-infoshare-data.csv"
+
+  # HLFS (Household Labour Force Survey) — unemployment rate, quarterly zip CSV
+  hlfs_zip_url: "https://www.stats.govt.nz/assets/Uploads/Household-labour-force-survey/Household-labour-force-survey-December-2024-quarter/Download-data/household-labour-force-survey-december-2024-quarter-csv.zip"
+  hlfs_series_ref: "HLFSQ.S2A"   # Unemployment rate, seasonally adjusted, quarterly
+
+  # RBNZ wholesale interest rates (90-day bank bill) — monthly Excel, no auth needed
+  rbnz_rates_url: "https://www.rbnz.govt.nz/-/media/project/sites/rbnz/files/statistics/series/b/b2/hb2-monthly.xlsx"
+
+  # New ADE API  (api.data.stats.govt.nz) — monthly CPI food index used as proxy
+  ade_base_url: "https://api.data.stats.govt.nz/rest/"
+  ade_cpi_dataflow: "STATSNZ,DF_CPI315601,1.0"   # CPI Food Price Index monthly by region
+  ade_leed_dataflow: "STATSNZ,LEED_AP1_001,1.0"  # LEED employment by industry, quarterly
+
+  start_date: "1987-01-01"   # extended: HLFS starts Q2 1986, retail starts ~1995
+  regions:
+    - Auckland
+    - Wellington
+    - Canterbury
+    - Waikato
+    - Bay of Plenty
+    - Otago
+    - Manawatu-Whanganui
+    - Hawke's Bay
+    - Taranaki
+    - Northland
+
+features:
+  lag_periods: [1, 2, 4, 8]          # quarters: 1q, 2q, 4q (1yr), 8q (2yr)
+  rolling_windows: [2, 4, 8]         # quarters
+  nan_fill_strategy: "drop"
+
+mlflow:
+  tracking_uri: mlruns/
+  experiment_name: nz-retail-forecasting
+  model_artifact_path: lgbm_model
+
+api:
+  model_path: models/best_model.joblib
+  max_forecast_horizon: 8   # max 8 quarters (2 years)

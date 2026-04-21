@@ -1,0 +1,36 @@
+# Environment
+.env
+*.env
+
+# Python
+*.pyc
+__pycache__/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Data — reproducible via pipeline, excluded to avoid committing large files
+data/raw/
+data/processed/
+
+# Models — binary artifacts
+models/
+
+# MLflow
+mlruns/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Test / lint cache
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+.mypy_cache/
+CV/
