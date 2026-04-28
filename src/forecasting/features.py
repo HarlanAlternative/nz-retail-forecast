@@ -111,10 +111,11 @@ class TimeSeriesFeatureEngineer(BaseEstimator, TransformerMixin):
         return df
 
     def _add_yoy_change(self, df: pd.DataFrame) -> pd.DataFrame:
-        # 4 periods = 1 year for quarterly data; 12 periods for monthly
-        yoy_periods = 4
-        yoy_base = df["retail_sales"].shift(yoy_periods)
-        df["retail_yoy_pct"] = (df["retail_sales"] - yoy_base) / yoy_base * 100
+        # shift(1) on numerator too — at prediction time t we only know up to t-1.
+        # This measures growth from t-5 to t-1, i.e. the most recent completed YoY.
+        lag1 = df["retail_sales"].shift(1)
+        lag5 = df["retail_sales"].shift(5)
+        df["retail_yoy_pct"] = (lag1 - lag5) / lag5 * 100
         return df
 
     @staticmethod
@@ -126,9 +127,10 @@ class TimeSeriesFeatureEngineer(BaseEstimator, TransformerMixin):
 
     @staticmethod
     def _add_cpi_adjusted(df: pd.DataFrame) -> pd.DataFrame:
-        # Normalise CPI so it doesn't dominate scale; use first non-null as base
+        # Use lagged retail_sales (t-1) so the feature is known at prediction time t.
+        # retail_sales[t] is the target and must never appear on the RHS of a feature.
         base_cpi = df["cpi"].dropna().iloc[0] if not df["cpi"].dropna().empty else 1.0
-        df["retail_real"] = df["retail_sales"] / (df["cpi"] / base_cpi)
+        df["retail_real"] = df["retail_sales"].shift(1) / (df["cpi"] / base_cpi)
         return df
 
     def _handle_nan(self, df: pd.DataFrame) -> pd.DataFrame:
