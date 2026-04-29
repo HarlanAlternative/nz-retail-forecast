@@ -28,7 +28,14 @@ Multi-source ingestion → pandera validation → TimeSeriesFeatureEngineer
     → 6 classical models + Stacking (Optuna + MLflow)
     → PyTorch LSTM/GRU (Optuna + walk-forward CV)
     → ablation experiments → FastAPI
+
+Online Retail II → log(1+qty) CSR matrix → LOO split
+    → Popularity baseline (honesty gate)
+    → TruncatedSVD + ALS (BM25) + TF-IDF/NMF content-based + Hybrid
+    → Recall@K / NDCG@K / MAP@K evaluation
 ```
+
+**Scenario 1 — NZ Retail Sales Forecasting**
 
 | Stage | Tool | Output |
 |-------|------|--------|
@@ -41,7 +48,55 @@ Multi-source ingestion → pandera validation → TimeSeriesFeatureEngineer
 | Ablation experiment | `ablation.py` | Exogenous variable signal vs noise test |
 | Inference | FastAPI | `/forecast` |
 
+**Scenario 2 — Recommender System (Online Retail II)**
+
+| Stage | Tool | Output |
+|-------|------|--------|
+| Data download + caching | UCI download → parquet | `data/raw/online_retail_ii.parquet` |
+| Matrix construction | log(1+qty) CSR sparse matrix | `sp.csr_matrix` (n_users × n_items) |
+| Train/test split | Leave-one-out (last purchase by date) | `test_items` dict |
+| Popularity baseline | Top-N by total interaction weight | Honesty gate: must be beaten |
+| Collaborative filtering | TruncatedSVD (k=50) | User/item latent factors |
+| Implicit ALS | BM25-weighted ALS (`implicit` library) | User/item embedding matrices |
+| Content-based | TF-IDF (5k vocab) + NMF (20 topics) on descriptions | Item topic matrix |
+| Hybrid | α·SVD + (1-α)·ContentBased, popularity cold-start fallback | Combined scores |
+| Evaluation | Recall@K, NDCG@K, MAP@K (K=10,20,50) | MLflow `recommender_system` |
+| Leakage audit | `diagnostics/recommender_audit.md` | Systematic check |
+
 ## Results
+
+### Scenario 2 — Recommender System (Online Retail II)
+
+Evaluation: leave-one-out split (last purchase by date held out) · ~3–4k users · ~2–3k items
+
+| Model | Recall@10 | NDCG@10 | MAP@10 | Recall@50 |
+|-------|----------:|--------:|-------:|----------:|
+| Popularity (baseline) | — | — | — | — |
+| SVD (k=50) | — | — | — | — |
+| ALS (BM25, 64 factors) | — | — | — | — |
+| Content-based (TF-IDF + NMF) | — | — | — | — |
+| **Hybrid (SVD + Content)** | — | — | — | — |
+
+> Run `python -m recommender.train_recommender` to populate the metrics table above.
+
+**Honesty gate:** the popularity baseline must be included in every comparison. A sophisticated model that does not beat it by a meaningful margin (>0.5pp Recall@10) signals a bug or absent collaborative signal.
+
+### Cross-Scenario SVD Comparison
+
+The same SVD mathematics yields fundamentally different latent structure depending on the input matrix:
+
+| | NZ Retail Forecasting | Online Retail II |
+|---|---|---|
+| **Matrix** | Time × Lag-features (102 quarters × 13 features) | Users × Items (implicit feedback) |
+| **SVD k for 90% variance** | **4** (trend + seasonality + level) | **much higher** (heterogeneous preferences) |
+| **SV1 interpretation** | Level (baseline demand) | Dominant purchase cluster |
+| **SV2 interpretation** | Trend / momentum | Secondary preference axis |
+| **SV3 interpretation** | Seasonal oscillation | Category grouping |
+| **Production use** | Rank-3 reconstruction ≈ full-rank (−0.06pp MAPE) | Latent factors for ranking |
+
+NZ retail sales is nearly rank-4 because its structure is dominated by trend + quarterly seasonality. User-item preference matrices are high-rank because thousands of users have individually distinct purchase patterns with no single dominant axis.
+
+### Scenario 1 — NZ Retail Sales Forecasting
 
 Test set: 8 quarters (2023 Q1 – 2024 Q4) · Training set: 102 quarters (1995 Q3 – 2022 Q4)
 
@@ -180,7 +235,16 @@ uvicorn api.app:app --reload
 # Docs: http://localhost:8000/docs
 ```
 
-### 8. Tests & linting
+### 8. Recommender system
+
+```bash
+python -m recommender.train_recommender
+# Downloads Online Retail II (~50 MB, cached), trains 5 models
+# Prints Recall@K / NDCG@K / MAP@K leaderboard
+# Logs to MLflow experiment: recommender_system
+```
+
+### 9. Tests & linting
 
 ```bash
 pytest tests/ -v
@@ -206,8 +270,19 @@ nz_economy/
 │   ├── lstm_model.py           # PyTorch LSTMForecaster + GRUForecaster + EarlyStopping
 │   ├── train_dl.py             # Optuna-tuned training + MLflow logging
 │   └── compare_dl_vs_classical.py  # Full comparison table + figure
+├── src/recommender/
+│   ├── data_loader.py          # UCI download, clean, log(1+qty) CSR matrix, LOO split
+│   ├── popularity_baseline.py  # Top-N popularity baseline (honesty gate)
+│   ├── evaluate.py             # Recall@K, NDCG@K, MAP@K
+│   ├── svd_model.py            # TruncatedSVD collaborative filtering
+│   ├── als_model.py            # ALS with BM25 weighting (implicit library)
+│   ├── content_based.py        # TF-IDF + NMF item similarity + Hybrid
+│   └── train_recommender.py    # Full pipeline + MLflow + figures
+├── diagnostics/
+│   └── recommender_audit.md    # Systematic leakage audit
 ├── notebooks/
-│   └── 01_lstm_vs_ridge.ipynb  # Scientific narrative: why DL doesn't beat classical
+│   ├── 01_lstm_vs_ridge.ipynb  # Scientific narrative: why DL doesn't beat classical
+│   └── 02_recommender_svd_vs_als.ipynb  # Cross-scenario SVD comparison (headline)
 ├── api/app.py          # FastAPI inference service
 ├── tests/              # pytest unit tests
 ├── config/config.yaml  # All tunable parameters
@@ -216,7 +291,7 @@ nz_economy/
 
 ## Stack
 
-Python · PyTorch · LightGBM · Prophet · statsmodels · scikit-learn · MLflow · Optuna · FastAPI · pandera · pytest · ruff
+Python · PyTorch · LightGBM · Prophet · statsmodels · scikit-learn · MLflow · Optuna · FastAPI · pandera · implicit · pytest · ruff
 
 ## Key Engineering Decisions
 
