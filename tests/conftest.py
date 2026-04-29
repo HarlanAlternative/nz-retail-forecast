@@ -14,17 +14,19 @@ import pytest
 def sample_sdmx_response() -> dict:
     """Minimal valid SDMX-JSON response with 6 monthly retail observations."""
     time_values = [
-        {"id": "2023-M01"}, {"id": "2023-M02"}, {"id": "2023-M03"},
-        {"id": "2023-M04"}, {"id": "2023-M05"}, {"id": "2023-M06"},
+        {"id": "2023-01"}, {"id": "2023-02"}, {"id": "2023-03"},
+        {"id": "2023-04"}, {"id": "2023-05"}, {"id": "2023-06"},
     ]
     observations = {str(i): [float(5000 + i * 100)] for i in range(6)}
     return {
         "data": {
-            "structure": {
-                "dimensions": {
-                    "observation": [{"values": time_values}]
+            "structures": [
+                {
+                    "dimensions": {
+                        "observation": [{"values": time_values}]
+                    }
                 }
-            },
+            ],
             "dataSets": [
                 {
                     "series": {
@@ -41,11 +43,13 @@ def empty_sdmx_response() -> dict:
     """SDMX-JSON response with no observations — should raise ValueError."""
     return {
         "data": {
-            "structure": {
-                "dimensions": {
-                    "observation": [{"values": []}]
+            "structures": [
+                {
+                    "dimensions": {
+                        "observation": [{"values": []}]
+                    }
                 }
-            },
+            ],
             "dataSets": [{"series": {}}],
         }
     }

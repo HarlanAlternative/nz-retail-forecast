@@ -17,7 +17,7 @@ from forecasting.data import ADEClient, RETAIL_SCHEMA
 # ---------------------------------------------------------------------------
 
 def _parse(response: dict, col: str = "retail_sales") -> pd.DataFrame:
-    return ADEClient._parse_sdmx(response, col)
+    return ADEClient._parse_sdmx_json(response, col)
 
 
 # ---------------------------------------------------------------------------
