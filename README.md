@@ -85,14 +85,15 @@ The same SVD mathematics yields fundamentally different latent structure dependi
 
 | | NZ Retail Forecasting | Online Retail II |
 |---|---|---|
-| **Matrix** | Time × Lag-features (102 quarters × 13 features) | Users × Items (implicit feedback) |
-| **SVD k for 90% variance** | **4** (trend + seasonality + level) | **much higher** (heterogeneous preferences) |
+| **Matrix** | Time × Lag-features (102 quarters × 13 features) | Users × Items (5,090 × 4,217, implicit feedback) |
+| **SVD k for 90% variance** | **4** (trend + seasonality + level) | **979** (heterogeneous preferences) |
+| **SVD k for 95% variance** | 4 | 1,368 |
 | **SV1 interpretation** | Level (baseline demand) | Dominant purchase cluster |
 | **SV2 interpretation** | Trend / momentum | Secondary preference axis |
 | **SV3 interpretation** | Seasonal oscillation | Category grouping |
-| **Production use** | Rank-3 reconstruction ≈ full-rank (−0.06pp MAPE) | Latent factors for ranking |
+| **Production use** | Rank-3 reconstruction ≈ full-rank (−0.06pp MAPE) | Latent factors for ranking (k=50 used, captures 33% variance) |
 
-NZ retail sales is nearly rank-4 because its structure is dominated by trend + quarterly seasonality. User-item preference matrices are high-rank because thousands of users have individually distinct purchase patterns with no single dominant axis.
+The user-item preference matrix requires **979 components** to explain 90% of variance — a **245× larger intrinsic dimension** than the NZ retail lag-feature matrix (k=4). This is not a failure of SVD; it reflects genuine heterogeneity: 5,090 users with individually distinct purchase patterns produce no single dominant low-rank structure, unlike retail sales where trend + quarterly seasonality account for almost all signal. Despite this high latent dimensionality, ALS at k=64 and SVD at k=50 still beat the popularity baseline by 16 and 13 percentage points respectively — showing that partial low-rank approximations capture actionable collaborative signal even when full variance recovery is impractical.
 
 ### Scenario 1 — NZ Retail Sales Forecasting
 
