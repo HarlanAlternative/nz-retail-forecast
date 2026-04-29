@@ -1,6 +1,6 @@
 # NZ Retail Sales Forecasting
 
-Forecasts New Zealand quarterly retail sales using official government data, with a full MLOps pipeline: multi-source data ingestion → pandera validation → feature engineering → multi-model training with MLflow tracking → FastAPI inference service.
+Forecasts New Zealand quarterly retail sales using official government data, with a full MLOps pipeline: multi-source data ingestion → pandera validation → feature engineering → classical + deep learning model comparison with MLflow tracking → FastAPI inference service.
 
 Best model: **Prophet, MAPE 2.00%** on a held-out 8-quarter test set (2023 Q1 – 2024 Q4).
 
@@ -25,7 +25,9 @@ All data is publicly available — no paid licences required.
 
 ```
 Multi-source ingestion → pandera validation → TimeSeriesFeatureEngineer
-    → 6 models + Stacking (Optuna + MLflow) → ablation experiment → FastAPI
+    → 6 classical models + Stacking (Optuna + MLflow)
+    → PyTorch LSTM/GRU (Optuna + walk-forward CV)
+    → ablation experiments → FastAPI
 ```
 
 | Stage | Tool | Output |
@@ -33,7 +35,8 @@ Multi-source ingestion → pandera validation → TimeSeriesFeatureEngineer
 | Ingestion & caching | Multi-source clients + parquet | `data/raw/*.parquet` |
 | Validation | pandera `DataFrameSchema` | `SchemaError` on bad data |
 | Feature engineering | sklearn `TransformerMixin` | Lags, rolling stats, YoY, cyclical encoding, CPI-adjusted values, exogenous lags |
-| Training | 6 models + Stacking + Optuna | `models/best_model.joblib` |
+| Classical training | 6 models + Stacking + Optuna | `models/best_model.joblib` |
+| Deep learning | PyTorch LSTM + GRU + Optuna | MLflow `deep_learning_comparison` |
 | Experiment tracking | MLflow | `mlruns/` |
 | Ablation experiment | `ablation.py` | Exogenous variable signal vs noise test |
 | Inference | FastAPI | `/forecast` |
@@ -42,14 +45,16 @@ Multi-source ingestion → pandera validation → TimeSeriesFeatureEngineer
 
 Test set: 8 quarters (2023 Q1 – 2024 Q4) · Training set: 102 quarters (1995 Q3 – 2022 Q4)
 
-| Model | RMSE | MAE | MAPE | Directional Accuracy |
-|-------|-----:|----:|-----:|---------------------:|
-| **Prophet (best)** | **643** | **471** | **2.00%** | 71.4% |
-| Ridge | 797 | 609 | 2.58% | 57.1% |
-| LightGBM + Optuna | 1,592 | 1,265 | 5.15% | 57.1% |
-| Holt-Winters | 1,708 | 1,474 | 6.23% | 85.7% |
-| SARIMA(1,1,1)(1,1,0)[4] | 1,949 | 1,715 | 7.23% | 57.1% |
-| ElasticNet | 3,408 | 2,651 | 11.13% | 85.7% |
+| Model | Type | RMSE | MAPE | Directional Accuracy |
+|-------|------|-----:|-----:|---------------------:|
+| **Prophet (best)** | Classical | **643** | **2.00%** | 71.4% |
+| Ridge | Classical | 797 | 2.58% | 57.1% |
+| LightGBM + Optuna | Classical | 1,592 | 5.15% | 57.1% |
+| Holt-Winters | Classical | 1,708 | 6.23% | 85.7% |
+| **GRU** | **Deep Learning** | **1,978** | **6.62%** | **71.4%** |
+| SARIMA(1,1,1)(1,1,0)[4] | Classical | 1,949 | 7.23% | 57.1% |
+| ElasticNet | Classical | 3,408 | 11.13% | 85.7% |
+| **LSTM** | **Deep Learning** | **5,107** | **16.37%** | **100.0%** |
 
 ### Why does Prophet outperform Ridge and LightGBM?
 
@@ -58,6 +63,21 @@ This is the key empirical finding of the project, validated by a data leakage au
 1. **Temporal decomposition:** Prophet's additive trend + quarterly seasonality decomposition directly models the structure of NZ retail sales without requiring manual lag feature engineering.
 2. **Small sample size hurts tree models:** 102 training quarters is insufficient for LightGBM to learn high-dimensional feature interactions without overfitting. Ridge is better-regularised but still limited by its linear assumptions on lag features.
 3. **Low-coverage exogenous features add noise to tree models (ablation-verified):** Removing sparse exogenous variables (CPI 85% coverage, unemployment from annual interpolation, interest rate 6%) drops LightGBM MAPE from 15.04% → 14.55% (−0.49pp). Ridge's L2 regularisation suppresses low-signal features automatically, but not as effectively as Prophet's complete bypass of the feature matrix.
+
+### Deep Learning Baselines
+
+PyTorch LSTM and GRU were trained with Optuna hyperparameter search (30 trials, walk-forward CV) over sequence lengths of 4, 8, and 12 quarters. Neither beats classical models:
+
+- **GRU (6.62% MAPE)** performs comparably to Holt-Winters but is outperformed by Prophet and Ridge.
+- **LSTM (16.37% MAPE)** is the worst-performing model.
+
+**Why deep learning fails here** (quantified in `notebooks/01_lstm_vs_ridge.ipynb`):
+
+1. **Sample size:** Only ~90 training sequences after windowing — far below the thousands typically needed for RNN generalisation. Learning curves show val loss diverging from train loss after ~10 epochs.
+2. **Linear signal:** NZ retail sales = trend + quarterly seasonality + noise. Ridge's lag features form a closed-form linear basis for this structure; LSTM's nonlinear capacity is wasted.
+3. **Regularisation mismatch:** Ridge's L2 penalty is analytically optimal for Gaussian-noise linear signals. Dropout + weight decay in LSTMs are heuristic and undercalibrated on 100-sample datasets.
+
+This is a deliberate honest negative result — the finding itself demonstrates scientific maturity.
 
 ### Data leakage audit
 
@@ -109,7 +129,18 @@ python -m forecasting.ablation
 # Answers: noise hypothesis vs sample-size hypothesis
 ```
 
-### 5. Start inference API
+### 5. Deep learning baselines
+
+```bash
+python -m deep_learning.train_dl
+# Trains LSTM + GRU with Optuna + walk-forward CV
+# Logs to MLflow experiment: deep_learning_comparison
+
+python -m deep_learning.compare_dl_vs_classical
+# Produces models/dl_vs_classical_comparison.png
+```
+
+### 6. Start inference API
 
 ```bash
 uvicorn api.app:app --reload
@@ -118,7 +149,7 @@ uvicorn api.app:app --reload
 # Docs: http://localhost:8000/docs
 ```
 
-### 6. Tests & linting
+### 7. Tests & linting
 
 ```bash
 pytest tests/ -v
@@ -134,17 +165,23 @@ nz_economy/
 │   ├── data.py         # Multi-source clients (Stats NZ / ADE / IMF / OECD) + pandera validation
 │   ├── features.py     # Time series feature engineering (sklearn TransformerMixin)
 │   ├── evaluate.py     # RMSE / MAE / MAPE / directional accuracy / Ljung-Box / plots
-│   ├── train.py        # 6 models + Stacking + Optuna + MLflow full pipeline
+│   ├── train.py        # 6 classical models + Stacking + Optuna + MLflow
 │   └── ablation.py     # Exogenous feature ablation experiment
+├── src/deep_learning/
+│   ├── lstm_model.py           # PyTorch LSTMForecaster + GRUForecaster + EarlyStopping
+│   ├── train_dl.py             # Optuna-tuned training + MLflow logging
+│   └── compare_dl_vs_classical.py  # Full comparison table + figure
+├── notebooks/
+│   └── 01_lstm_vs_ridge.ipynb  # Scientific narrative: why DL doesn't beat classical
 ├── api/app.py          # FastAPI inference service
 ├── tests/              # pytest unit tests
 ├── config/config.yaml  # All tunable parameters
-└── models/             # Saved model bundles + feature importance + forecast plots
+└── models/             # Saved model bundles + comparison figures
 ```
 
 ## Stack
 
-Python · LightGBM · Prophet · statsmodels · scikit-learn · MLflow · Optuna · FastAPI · pandera · pytest · ruff
+Python · PyTorch · LightGBM · Prophet · statsmodels · scikit-learn · MLflow · Optuna · FastAPI · pandera · pytest · ruff
 
 ## Key Engineering Decisions
 

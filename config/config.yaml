@@ -67,3 +67,10 @@ mlflow:
 api:
   model_path: models/best_model.joblib
   max_forecast_horizon: 8   # max 8 quarters (2 years)
+
+deep_learning:
+  experiment_name: deep_learning_comparison
+  sequence_lengths: [4, 8, 12]   # quarters to look back
+  max_epochs: 200
+  patience: 20                   # early stopping patience
+  optuna_trials: 30
