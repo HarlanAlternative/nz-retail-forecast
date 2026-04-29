@@ -170,7 +170,11 @@ def run_recommender() -> None:
         _log_leakage_audit()
 
         for name, metrics in results.items():
-            prefix = name.lower().replace(" ", "_").replace("(", "").replace(")", "")
+            prefix = (
+                name.lower()
+                .replace(" ", "_").replace("(", "").replace(")", "")
+                .replace("=", "").replace("/", "_")
+            )
             for metric, val in metrics.items():
                 if metric != "n_users":
                     mlflow.log_metric(f"{prefix}_{metric.replace('@', '_at_')}", val)
@@ -192,7 +196,7 @@ def run_recommender() -> None:
         ndcg = metrics.get("ndcg@10", 0)
         ap = metrics.get("map@10", 0)
         delta = r10 - pop_r10
-        marker = "  ✓" if delta > 0.005 else ("  =" if abs(delta) <= 0.005 else "  ✗")
+        marker = "  +" if delta > 0.005 else ("  =" if abs(delta) <= 0.005 else "  -")
         print(f"{name:<20} {r10:>10.4f} {ndcg:>9.4f} {ap:>8.4f} "
               f"{r20:>10.4f} {r50:>10.4f} {delta:>+7.4f}{marker}")
 

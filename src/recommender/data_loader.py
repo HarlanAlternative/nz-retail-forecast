@@ -51,6 +51,10 @@ def _download_and_cache() -> pd.DataFrame:
     df2 = pd.read_excel(buf, sheet_name=1, engine="openpyxl")
 
     df = pd.concat([df1, df2], ignore_index=True)
+    # Normalise mixed-type columns so pyarrow can serialise them
+    df["Invoice"] = df["Invoice"].astype(str)
+    df["StockCode"] = df["StockCode"].astype(str)
+    df["Description"] = df["Description"].astype(str)
     df.to_parquet(_CACHE_PATH, index=False)
     logger.info("Cached %d rows → %s", len(df), _CACHE_PATH)
     return df

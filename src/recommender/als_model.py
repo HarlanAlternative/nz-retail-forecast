@@ -84,17 +84,16 @@ class ALSRecommender:
             random_state=self.random_state,
             use_gpu=False,
         )
-        # ALS expects item × user format
-        self._model.fit(weighted.T.tocsr())
+        # implicit 0.7.x expects user × item format (rows=users, cols=items)
+        self._model.fit(weighted)
         return self
 
     def recommend(self, user_idx: int, k: int = 10) -> list[int]:
         assert self._model is not None, "Call fit() first"
         user_row = self._train[user_idx]
-
         if user_row.nnz == 0:
             return []
-
+        # implicit requires exactly 1 row per user_idx
         item_ids, _ = self._model.recommend(
             user_idx,
             user_row,
