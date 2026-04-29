@@ -67,19 +67,17 @@ Online Retail II → log(1+qty) CSR matrix → LOO split
 
 ### Scenario 2 — Recommender System (Online Retail II)
 
-Evaluation: leave-one-out split (last purchase by date held out) · ~3–4k users · ~2–3k items
+Evaluation: leave-one-out split (last purchase by date held out) · 5,090 users · 4,217 items · 5,086 test users
 
-| Model | Recall@10 | NDCG@10 | MAP@10 | Recall@50 |
-|-------|----------:|--------:|-------:|----------:|
-| Popularity (baseline) | — | — | — | — |
-| SVD (k=50) | — | — | — | — |
-| ALS (BM25, 64 factors) | — | — | — | — |
-| Content-based (TF-IDF + NMF) | — | — | — | — |
-| **Hybrid (SVD + Content)** | — | — | — | — |
+| Model | Recall@10 | NDCG@10 | MAP@10 | Recall@50 | vs Popularity |
+|-------|----------:|--------:|-------:|----------:|--------------:|
+| Popularity (baseline) | 0.0486 | 0.0262 | 0.0195 | 0.1294 | — |
+| SVD (k=50) | 0.1819 | 0.1083 | 0.0859 | 0.3362 | +0.1333 |
+| **ALS (BM25, 64 factors)** | **0.2114** | **0.1307** | **0.1059** | **0.3911** | **+0.1628** |
+| Hybrid (SVD 60% + Content 40%) | 0.1406 | 0.0880 | 0.0719 | 0.2316 | +0.0920 |
+| Content-based (TF-IDF + NMF) | 0.0140 | 0.0066 | 0.0044 | 0.0501 | −0.0346 |
 
-> Run `python -m recommender.train_recommender` to populate the metrics table above.
-
-**Honesty gate:** the popularity baseline must be included in every comparison. A sophisticated model that does not beat it by a meaningful margin (>0.5pp Recall@10) signals a bug or absent collaborative signal.
+**ALS (BM25-weighted) is the best model**, achieving Recall@10 = 0.2114 — a +16.3pp gain over the popularity baseline (honesty gate passed). SVD ranks second at 0.1819 (+13.3pp), confirming that collaborative filtering signals are real and learnable. The content-based model (0.0140) falls below popularity: item description text alone carries no collaborative signal and merely adds noise relative to knowing which items co-occur in purchase histories. The hybrid is pulled down by its 40% content-based weight, finishing third despite having access to SVD's strong signal — a lesson that noisy components degrade even good ensembles.
 
 ### Cross-Scenario SVD Comparison
 
